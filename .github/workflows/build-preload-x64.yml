@@ -6,6 +6,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-2022
@@ -50,3 +53,12 @@ jobs:
       with:
         name: JPEGView-preload-x64-${{ env.build_ver }}
         path: src/JPEGView/bin/x64/Release
+
+    - name: Publish zip as pre-release (downloadable without login)
+      shell: powershell
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $zip = "JPEGView-preload-x64-$env:build_ver.zip"
+        Compress-Archive -Path src/JPEGView/bin/x64/Release/* -DestinationPath $zip
+        gh release create "preload-$env:build_ver" $zip --target "${{ github.sha }}" --prerelease --title "JPEGView preload $env:build_ver" --notes "Read-ahead window build (ReadAheadForward=5, ReadAheadBackward=2). Commit ${{ github.sha }}"
