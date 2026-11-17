@@ -281,6 +281,9 @@ CSettingsProvider::CSettingsProvider(void) {
 
 	m_minimalWindowSize = GetSize(_T("MinimalWindowSize"), CSize(320, 240));
 	m_minimalDisplayTime = GetInt(_T("MinimalDisplayTime"), 0, 0, 1000);
+	m_nReadAheadForward = GetInt(_T("ReadAheadForward"), 5, 0, 20);
+	m_nReadAheadBackward = GetInt(_T("ReadAheadBackward"), 2, 0, 20);
+	m_nReadAheadThreads = GetInt(_T("ReadAheadThreads"), 3, 1, 8);
 	m_userCropAspectRatio = GetSize(_T("UserCropAspectRatio"), CSize(1, 1));
 	if (m_userCropAspectRatio.cx <= 0 || m_userCropAspectRatio.cy <= 0) {
 		m_userCropAspectRatio = CSize(1, 1);

@@ -13,6 +13,8 @@ CJPEGProvider::CJPEGProvider(HWND handlerWnd, int nNumThreads, int nNumBuffers) 
 	m_nNumBuffers = nNumBuffers;
 	m_nCurrentTimeStamp = 0;
 	m_eOldDirection = FORWARD;
+	m_nWindowForward = 0;
+	m_nWindowBackward = 0;
 	m_pWorkThreads = new CImageLoadThread*[nNumThreads];
 	for (int i = 0; i < nNumThreads; i++) {
 		m_pWorkThreads[i] = new CImageLoadThread();
@@ -42,7 +44,15 @@ CJPEGImage* CJPEGProvider::RequestImage(CFileList* pFileList, EReadAheadDirectio
 
 	// Search if we have the requested image already present or in progress
 	CImageRequest* pRequest = FindRequest(strFileName, nFrameIndex);
+	bool bWindowMode = pFileList != NULL && (m_nWindowForward > 0 || m_nWindowBackward > 0) &&
+		(eDirection == FORWARD || eDirection == BACKWARD);
+	if (bWindowMode) {
+		// with a read-ahead window, a direction change is not a wrong guess - keep everything that is in the window
+		m_eOldDirection = eDirection;
+		eDirection = NONE;
+	}
 	bool bDirectionChanged = eDirection != m_eOldDirection || eDirection == TOGGLE;
+	if (bWindowMode) bDirectionChanged = false;
 	bool bRemoveAlsoActiveRequests = bDirectionChanged; // if direction changed, all read-ahead requests are wrongly guessed
 	bool bWasOutOfMemory = false;
 	m_eOldDirection = eDirection;
@@ -93,6 +103,13 @@ CJPEGImage* CJPEGProvider::RequestImage(CFileList* pFileList, EReadAheadDirectio
 			DeleteElement(pRequest);
 			pRequest = StartRequestAndWaitUntilReady(strFileName, nFrameIndex, processParams);
 		}
+	}
+
+	if (bWindowMode) {
+		UpdateReadAheadWindow(pFileList, pRequest->FileName, pRequest->FrameIndex, processParams, !bWasOutOfMemory);
+		bOutOfMemory = pRequest->OutOfMemory;
+		bExceptionError = pRequest->ExceptionError;
+		return pRequest->Image;
 	}
 
 	// cleanup stuff no longer used
@@ -166,7 +183,9 @@ bool CJPEGProvider::ClearRequest(CJPEGImage* pImage, bool releaseLockedFile) {
 	std::list<CImageRequest*>::iterator iter;
 	for (iter = m_requestList.begin( ); iter != m_requestList.end( ); iter++ ) {
 		if ((*iter)->Image == pImage) {
-			if (releaseLockedFile) m_pWorkThreads[0]->ReleaseFile((*iter)->FileName);
+			if (releaseLockedFile) {
+				for (int i = 0; i < m_nNumThread; i++) m_pWorkThreads[i]->ReleaseFile((*iter)->FileName);
+			}
 			// images that are not ready cannot be removed yet
 			if ((*iter)->Ready) {
 				DeleteElementAt(iter);
@@ -357,6 +376,70 @@ void CJPEGProvider::DeleteElement(CImageRequest* pRequest) {
 	delete pRequest->Image;
 	delete pRequest;
 	m_requestList.remove(pRequest);
+}
+
+void CJPEGProvider::UpdateReadAheadWindow(CFileList* pFileList, LPCTSTR strFileName, int nFrameIndex,
+										  const CProcessParams & processParams, bool bStartNew) {
+	// Files of the window, in order of priority: next, previous, next+1, previous+1, ...
+	std::list<CString> window;
+	int nMax = (m_nWindowForward > m_nWindowBackward) ? m_nWindowForward : m_nWindowBackward;
+	for (int i = 1; i <= nMax; i++) {
+		if (i <= m_nWindowForward) {
+			LPCTSTR sFile = pFileList->PeekInFolder(i, true);
+			if (sFile != NULL) window.push_back(CString(sFile));
+		}
+		if (i <= m_nWindowBackward) {
+			LPCTSTR sFile = pFileList->PeekInFolder(i, false);
+			if (sFile != NULL) window.push_back(CString(sFile));
+		}
+	}
+
+	// Remove all requests outside of the window (current image is in use and is kept)
+	bool bRemoved;
+	do {
+		bRemoved = false;
+		std::list<CImageRequest*>::iterator iter;
+		for (iter = m_requestList.begin(); iter != m_requestList.end(); iter++) {
+			CImageRequest* pReq = *iter;
+			if (pReq->InUse) continue;
+			if (_tcsicmp(pReq->FileName, strFileName) == 0 && pReq->FrameIndex == nFrameIndex) continue;
+			bool bInWindow = false;
+			if (!pReq->Deleted && pReq->FrameIndex == 0 && !IsDestructivelyProcessed(pReq->Image)) {
+				std::list<CString>::const_iterator iterW;
+				for (iterW = window.begin(); iterW != window.end(); iterW++) {
+					if (_tcsicmp(pReq->FileName, *iterW) == 0) {
+						bInWindow = true;
+						break;
+					}
+				}
+			}
+			if (bInWindow) continue;
+			if (pReq->Ready) {
+				DeleteElementAt(iter);
+				bRemoved = true;
+				break;
+			} else {
+				// still loading - remove when finished
+				pReq->Deleted = true;
+				pReq->IsActive = false;
+			}
+		}
+	} while (bRemoved);
+
+	if (!bStartNew) {
+		return;
+	}
+
+	// Start loading the missing images of the window
+	CProcessParams paramsCopied = processParams;
+	// The read ahead threads need this flag to be deleted - we can speculatively process the image with good hit rate
+	paramsCopied.ProcFlags = SetProcessingFlag(paramsCopied.ProcFlags, PFLAG_NoProcessingAfterLoad, false);
+	std::list<CString>::const_iterator iterW;
+	for (iterW = window.begin(); iterW != window.end(); iterW++) {
+		if (FindRequest(*iterW, 0) == NULL) {
+			StartNewRequest(*iterW, 0, paramsCopied);
+		}
+	}
 }
 
 bool CJPEGProvider::IsDestructivelyProcessed(CJPEGImage* pImage) {

@@ -169,6 +169,11 @@ private:
 	CDirectoryWatcher & m_directoryWatcher;
 
 	void MoveIterToLast();
+public:
+	// Peeks the file nIndex positions after (bForward) or before the current one, staying inside the current folder
+	// and never wrapping past the start file of the iteration. Returns NULL if there is no such file.
+	LPCTSTR PeekInFolder(int nIndex, bool bForward) const;
+private:
 	void NextInFolder();
 	CFileList* GotoFirstShown();
 	std::list<CFileDesc>::iterator FindFile(const CString& sName);

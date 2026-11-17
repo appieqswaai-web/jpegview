@@ -500,6 +500,26 @@ const FILETIME* CFileList::CurrentModificationTime() const {
 	}
 }
 
+LPCTSTR CFileList::PeekInFolder(int nIndex, bool bForward) const {
+	if (m_fileList.size() == 0 || m_iter == m_fileList.end()) {
+		return NULL;
+	}
+	std::list<CFileDesc>::const_iterator iter = m_iter;
+	std::list<CFileDesc>::const_iterator iterStart = m_iterStart;
+	for (int i = 0; i < nIndex; i++) {
+		if (bForward) {
+			iter++;
+			if (iter == m_fileList.end()) iter = m_fileList.begin();
+			if (iter == iterStart) return NULL; // went around the whole folder
+		} else {
+			if (iter == iterStart) return NULL; // at the start of the iteration
+			if (iter == m_fileList.begin()) iter = m_fileList.end();
+			iter--;
+		}
+	}
+	return iter->GetName();
+}
+
 LPCTSTR CFileList::PeekNextPrev(int nIndex, bool bForward, bool bToggle) {
 	if (bToggle) {
 		return (m_nMarkedIndexShow == 0) ? m_sMarkedFile : m_sMarkedFileCurrent;

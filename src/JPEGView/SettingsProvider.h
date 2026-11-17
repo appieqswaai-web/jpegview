@@ -122,6 +122,9 @@ public:
 	Helpers::EMeasureUnits MeasureUnit() { return m_eMeasureUnit; }
 	CSize MinimalWindowSize() { return m_minimalWindowSize; }
 	int MinimalDisplayTime() { return m_minimalDisplayTime; }
+	int ReadAheadForward() { return m_nReadAheadForward; }
+	int ReadAheadBackward() { return m_nReadAheadBackward; }
+	int ReadAheadThreads() { return m_nReadAheadThreads; }
 	CSize UserCropAspectRatio() { return m_userCropAspectRatio; }
 	LPCTSTR WallpaperPath() { return m_sWallpaperPath; }
 	bool SkipFileOpenDialogOnStartup() { return m_bSkipFileOpenDialogOnStartup; }
@@ -292,6 +295,9 @@ private:
 	Helpers::EMeasureUnits m_eMeasureUnit;
 	CSize m_minimalWindowSize;
 	int m_minimalDisplayTime;
+	int m_nReadAheadForward;
+	int m_nReadAheadBackward;
+	int m_nReadAheadThreads;
 	CSize m_userCropAspectRatio;
 	CString m_sWallpaperPath;
 	bool m_bSkipFileOpenDialogOnStartup;

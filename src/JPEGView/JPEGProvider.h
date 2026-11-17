@@ -67,6 +67,10 @@ public:
 	// message was received.
 	void OnImageLoadCompleted(int nHandle);
 
+	// Keep a window of images decoded around the current one: nForward images after and nBackward images before it.
+	// Changing the direction does not discard the window. If both are zero, the original read-ahead strategy is used.
+	void SetReadAheadWindow(int nForward, int nBackward) { m_nWindowForward = nForward; m_nWindowBackward = nBackward; }
+
 private:
 	// stores a request for loading and processing a JPEG image
 	struct CImageRequest {
@@ -113,6 +117,10 @@ private:
 	int m_nNumBuffers;
 	int m_nCurrentTimeStamp;
 	EReadAheadDirection m_eOldDirection;
+	int m_nWindowForward;
+	int m_nWindowBackward;
+
+	void UpdateReadAheadWindow(CFileList* pFileList, LPCTSTR strFileName, int nFrameIndex, const CProcessParams & processParams, bool bStartNew);
 
 	bool WaitForAsyncRequest(int nHandle, int nMessage);
 	void GetLoadedImageFromWorkThread(CImageRequest* pRequest);

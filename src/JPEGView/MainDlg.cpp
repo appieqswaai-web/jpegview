@@ -383,7 +383,8 @@ LRESULT CMainDlg::OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam
 	CProcessingThreadPool::This().CreateThreadPoolThreads();
 
 	// create JPEG provider and request first image - do no processing yet if not in fullscreen mode (as we do not know the size yet)
-	m_pJPEGProvider = new CJPEGProvider(m_hWnd, NUM_THREADS, READ_AHEAD_BUFFERS);	
+	m_pJPEGProvider = new CJPEGProvider(m_hWnd, sp.ReadAheadThreads(), READ_AHEAD_BUFFERS);
+	m_pJPEGProvider->SetReadAheadWindow(sp.ReadAheadForward(), sp.ReadAheadBackward());	
 	m_pCurrentImage = m_pJPEGProvider->RequestImage(m_pFileList, CJPEGProvider::FORWARD,
 		m_pFileList->Current(), 0, CreateProcessParams(!m_bFullScreenMode), m_bOutOfMemoryLastImage, m_bExceptionErrorLastImage);
 	if (m_pCurrentImage != NULL && m_pCurrentImage->IsAnimation()) {
