@@ -68,6 +68,8 @@ public:
 	CImageProcessingParams LandscapeModeParams(const CImageProcessingParams& templParams);
 	bool LandscapeMode() { return m_bLandscapeMode; }
 	int MaxSlideShowFileListSize() { return m_nMaxSlideShowFileListSize; }
+	int ReadAheadForward() { return m_nReadAheadForward; }
+	int ReadAheadBackward() { return m_nReadAheadBackward; }
 	Helpers::ETransitionEffect SlideShowTransitionEffect() { return m_eSlideShowTransitionEffect; }
 	int SlideShowEffectTimeMs() { return m_nSlideShowEffectTimeMs; }
 	bool ForceGDIPlus() { return m_bForceGDIPlus; }
@@ -239,6 +241,8 @@ private:
 	CString m_sLandscapeModeParams;
 	bool m_bLandscapeMode;
 	int m_nMaxSlideShowFileListSize;
+	int m_nReadAheadForward;
+	int m_nReadAheadBackward;
 	Helpers::ETransitionEffect m_eSlideShowTransitionEffect;
 	int m_nSlideShowEffectTimeMs;
 	bool m_bForceGDIPlus;

@@ -6,11 +6,15 @@
 #include "FileList.h"
 #include "ProcessParams.h"
 #include "BasicProcessing.h"
+#include "SettingsProvider.h"
+#include <vector>
 
 CJPEGProvider::CJPEGProvider(HWND handlerWnd, int nNumThreads, int nNumBuffers) {
 	m_hHandlerWnd = handlerWnd;
 	m_nNumThread = nNumThreads;
 	m_nNumBuffers = nNumBuffers;
+	m_nReadAheadForward = CSettingsProvider::This().ReadAheadForward();
+	m_nReadAheadBackward = CSettingsProvider::This().ReadAheadBackward();
 	m_nCurrentTimeStamp = 0;
 	m_eOldDirection = FORWARD;
 	m_pWorkThreads = new CImageLoadThread*[nNumThreads];
@@ -95,13 +99,19 @@ CJPEGImage* CJPEGProvider::RequestImage(CFileList* pFileList, EReadAheadDirectio
 		}
 	}
 
-	// cleanup stuff no longer used
-	RemoveUnusedImages(bRemoveAlsoActiveRequests);
-	ClearOldestInactiveRequest();
+	if (pFileList != NULL && (m_nReadAheadForward > 0 || m_nReadAheadBackward > 0)) {
+		// Window based caching: keep the next m_nReadAheadForward and the previous m_nReadAheadBackward
+		// images in memory, independent of the navigation direction
+		UpdateReadAheadWindow(pFileList, pRequest, processParams, !bWasOutOfMemory && eDirection != NONE);
+	} else {
+		// cleanup stuff no longer used
+		RemoveUnusedImages(bRemoveAlsoActiveRequests);
+		ClearOldestInactiveRequest();
 
-	// check if we shall start new requests (don't start another request if we are short of memory!)
-	if (m_requestList.size() < (unsigned int)m_nNumBuffers && !bDirectionChanged && !bWasOutOfMemory && eDirection != NONE) {
-		StartNewRequestBundle(pFileList, eDirection, processParams, m_nNumThread, pRequest);
+		// check if we shall start new requests (don't start another request if we are short of memory!)
+		if (m_requestList.size() < (unsigned int)m_nNumBuffers && !bDirectionChanged && !bWasOutOfMemory && eDirection != NONE) {
+			StartNewRequestBundle(pFileList, eDirection, processParams, m_nNumThread, pRequest);
+		}
 	}
 
 	bOutOfMemory = pRequest->OutOfMemory;
@@ -283,6 +293,75 @@ CImageLoadThread* CJPEGProvider::SearchThreadForNewRequest(void) {
 	}
 	// all threads are occupied, return thread working on smallest handle (will finish earliest)
 	return (pBestOccupiedThread == NULL) ? m_pWorkThreads[0] : pBestOccupiedThread;
+}
+
+void CJPEGProvider::UpdateReadAheadWindow(CFileList* pFileList, CImageRequest* pCurrentRequest,
+										  const CProcessParams & processParams, bool bStartRequests) {
+	// Collect the files of the window in priority order: next, previous, then the remaining next and previous images
+	std::vector<CString> forward, backward;
+	for (int i = 1; i <= m_nReadAheadForward; i++) {
+		LPCTSTR sFileName = pFileList->PeekNextPrev(i, true, false);
+		if (sFileName == NULL) break;
+		forward.push_back(CString(sFileName));
+	}
+	for (int i = 1; i <= m_nReadAheadBackward; i++) {
+		LPCTSTR sFileName = pFileList->PeekNextPrev(i, false, false);
+		if (sFileName == NULL) break;
+		backward.push_back(CString(sFileName));
+	}
+	std::vector<CString> window;
+	if (forward.size() > 0) window.push_back(forward[0]);
+	if (backward.size() > 0) window.push_back(backward[0]);
+	for (unsigned int i = 1; i < forward.size(); i++) window.push_back(forward[i]);
+	for (unsigned int i = 1; i < backward.size(); i++) window.push_back(backward[i]);
+
+	// Remove all cached images outside of the window (the current file is always kept)
+	bool bRemoved;
+	do {
+		bRemoved = false;
+		std::list<CImageRequest*>::iterator iter;
+		for (iter = m_requestList.begin(); iter != m_requestList.end(); iter++) {
+			CImageRequest* pRequest = *iter;
+			if (pRequest == pCurrentRequest || pRequest->InUse || !pRequest->Ready) {
+				continue;
+			}
+			bool bKeep = !IsDestructivelyProcessed(pRequest->Image) && !pRequest->Deleted;
+			if (bKeep && _tcsicmp(pRequest->FileName, pCurrentRequest->FileName) != 0) {
+				bKeep = false;
+				for (unsigned int i = 0; i < window.size(); i++) {
+					if (pRequest->FrameIndex == 0 && _tcsicmp(pRequest->FileName, window[i]) == 0) {
+						bKeep = true;
+						break;
+					}
+				}
+			}
+			if (!bKeep) {
+#ifdef DEBUG
+				::OutputDebugString(_T("Delete request outside read ahead window: ")); ::OutputDebugString(pRequest->FileName); ::OutputDebugString(_T("\n"));
+#endif
+				DeleteElementAt(iter);
+				bRemoved = true;
+				break;
+			}
+		}
+	} while (bRemoved);
+
+	if (!bStartRequests) {
+		return;
+	}
+
+	// The worker thread processes the most recently added request first, thus add the requests
+	// with the lowest priority first
+	CProcessParams paramsReadAhead = processParams;
+	if (GetProcessingFlag(PFLAG_NoProcessingAfterLoad, paramsReadAhead.ProcFlags)) {
+		// The read ahead threads need this flag to be deleted - we can speculatively process the image with good hit rate
+		paramsReadAhead.ProcFlags = SetProcessingFlag(paramsReadAhead.ProcFlags, PFLAG_NoProcessingAfterLoad, false);
+	}
+	for (int i = (int)window.size() - 1; i >= 0; i--) {
+		if (_tcsicmp(window[i], pCurrentRequest->FileName) != 0 && FindRequest(window[i], 0) == NULL) {
+			StartNewRequest(window[i], 0, paramsReadAhead);
+		}
+	}
 }
 
 void CJPEGProvider::RemoveUnusedImages(bool bRemoveAlsoActiveRequests) {

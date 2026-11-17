@@ -111,6 +111,8 @@ private:
 	CImageLoadThread** m_pWorkThreads;
 	int m_nNumThread; // number of threads in m_pWorkThreads
 	int m_nNumBuffers;
+	int m_nReadAheadForward; // number of images after the current image kept in memory
+	int m_nReadAheadBackward; // number of images before the current image kept in memory
 	int m_nCurrentTimeStamp;
 	EReadAheadDirection m_eOldDirection;
 
@@ -123,6 +125,7 @@ private:
 	void StartNewRequestBundle(CFileList* pFileList, EReadAheadDirection eDirection, const CProcessParams & processParams, int nNumRequests, CImageRequest* pLastReadyRequest);
 	CImageRequest* FindRequest(LPCTSTR strFileName, int nFrameIndex);
 	void ClearOldestInactiveRequest();
+	void UpdateReadAheadWindow(CFileList* pFileList, CImageRequest* pCurrentRequest, const CProcessParams & processParams, bool bStartRequests);
 	void DeleteElementAt(std::list<CImageRequest*>::iterator iteratorAt); // also deletes the request and the image in the request
 	void DeleteElement(CImageRequest* pRequest);
 	bool IsDestructivelyProcessed(CJPEGImage* pImage);

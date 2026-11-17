@@ -1,0 +1,52 @@
+name: Build x64 Release (read-ahead window)
+
+# Builds JPEGView.exe (x64 Release, no installer) on a GitHub hosted Windows runner
+# and uploads the portable folder as an artifact.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup msbuild
+      uses: microsoft/setup-msbuild@v2
+      with:
+        msbuild-architecture: x64
+
+    - name: WTL includes submodule init
+      shell: cmd
+      run: git submodule update --init deps/WTL-sf
+
+    - name: Patch version label
+      shell: powershell
+      run: |
+        $ver = "$(Get-Date -Format 'yyyy.MM.dd').${{ github.run_number }}"
+        echo "build_ver=$ver" >> $env:GITHUB_ENV
+        $f = "src/JPEGView/resource.h"
+        $c = Get-Content $f -Raw
+        $c = $c -replace '(#define JPEGVIEW_TITLE "JPEGView)(")', "`$1 (preload $ver)`$2"
+        Set-Content $f $c -NoNewline
+        Select-String -Path $f -Pattern "JPEGVIEW_"
+
+    - name: Build JPEGView and WICLoader
+      shell: cmd
+      run: msbuild.exe src\JPEGView.sln /t:JPEGView;WICLoader /p:Platform=x64 /p:Configuration=Release /p:PlatformToolset=v143 /m
+
+    - name: Clean up build leftovers
+      shell: bash
+      run: |
+        cd src/JPEGView/bin/x64/Release
+        rm -f WICLoader.exp WICLoader.lib WICLoader.pdb *.iobj *.ipdb
+        ls -la
+
+    - name: Upload portable build
+      uses: actions/upload-artifact@v4
+      with:
+        name: JPEGView-preload-x64-${{ env.build_ver }}
+        path: src/JPEGView/bin/x64/Release

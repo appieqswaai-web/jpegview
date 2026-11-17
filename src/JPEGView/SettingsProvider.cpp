@@ -169,6 +169,8 @@ CSettingsProvider::CSettingsProvider(void) {
 	}
 
 	m_nMaxSlideShowFileListSize = GetInt(_T("MaxSlideShowFileListSizeKB"), 200, 100, 10000);
+	m_nReadAheadForward = GetInt(_T("ReadAheadForward"), 5, 0, 20);
+	m_nReadAheadBackward = GetInt(_T("ReadAheadBackward"), 2, 0, 20);
 	m_nSlideShowEffectTimeMs = GetInt(_T("SlideShowEffectTime"), 200, 100, 5000);
 	m_bForceGDIPlus = GetBool(_T("ForceGDIPlus"), false);
 	m_bSingleInstance = GetBool(_T("SingleInstance"), false);
